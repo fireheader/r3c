@@ -433,6 +433,10 @@ public:
     // Executes all previously queued commands in a transaction and restores the connection state to normal.
     const RedisReplyHelper exec(const std::string& key, std::pair<std::string, uint16_t>* which=NULL);
 
+    // Find all keys matching the given pattern 
+    // add by hehanyuan 20190506
+    void keys(const std::string& pattern, std::set<std::string>* values, int retry_times = RETRY_TIMES, std::pair<std::string, uint16_t>* which = NULL) throw (CRedisException);
+
 public: // KV
     // Set a key's time to live in seconds.
     // Time complexity: O(1)
@@ -464,6 +468,11 @@ public: // KV
     // Set the string value of a key.
     // Time complexity: O(1)
     void set(const std::string& key, const std::string& value, std::pair<std::string, uint16_t>* which=NULL, int retry_times=RETRY_TIMES, bool force_retry=true) throw (CRedisException);
+
+    // getset
+    // Time complexity: O(1)
+    // Returns false if key does not exist
+    bool getset(const std::string& key, std::string* oldVal, const std::string& newVal, std::pair<std::string, uint16_t>* which = NULL, int retry_times = RETRY_TIMES, bool force_retry = true) throw(CRedisException);
 
     // Set the value of a key, only if the does not exist.
     // Time complexity: O(1)
@@ -672,6 +681,10 @@ public: // LIST
     // Remove and get the first element in a list.
     // Time complexity: O(1)
     bool lpop(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which=NULL, int retry_times=RETRY_TIMES, bool force_retry=true) throw (CRedisException);
+
+    // lset
+    // 
+    bool lset(const std::string& key, int64_t index, const std::string& value, std::pair<std::string, uint16_t>* which = NULL, int retry_times = RETRY_TIMES, bool force_retry = true) throw (CRedisException);
 
     // Prepend a value to a list.
     // Time complexity: O(1)
@@ -905,6 +918,10 @@ public:
     // If network timeout, the result of write is not uncertain, maybe succes or failure.
     // Not retry if force_retry is false when is_read_command is false.
     const RedisReplyHelper redis_command(bool is_read_command, bool force_retry, int retry_times, const std::string& key, const CCommandArgs& command_args, std::pair<std::string, uint16_t>* which);
+
+    // cluster mode, send command to all nodes
+    // add by hehanyuan 20190506
+    const std::vector<RedisReplyHelper> redis_command_cluster(int retry_times, const CCommandArgs& command_args);
 
 private:
     void init();

@@ -497,6 +497,40 @@ const RedisReplyHelper CRedisClient::exec(const std::string& key, std::pair<std:
     return redis_command(false, force_retry, retry_times, key, cmd_args, which);
 }
 
+void CRedisClient::keys(const std::string& pattern, std::set<std::string>* values, int retry_times, std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    std::string key;
+    CCommandArgs cmd_args;
+    cmd_args.add_arg("keys");
+    cmd_args.add_arg(pattern);
+    cmd_args.final();
+
+    if (!cluster_mode())
+    {
+        // standlone
+        const RedisReplyHelper redis_reply = redis_command(true, false, retry_times, key, cmd_args, which);
+        if (REDIS_REPLY_ARRAY == redis_reply->type)
+        {
+            get_values(redis_reply.get(), values);
+        }
+    }
+    else
+    {
+        // cluster
+        const std::vector<RedisReplyHelper> redis_reply = redis_command_cluster(retry_times, cmd_args);
+        std::vector<RedisReplyHelper>::const_iterator iter = redis_reply.begin();
+        for (; iter != redis_reply.end(); ++iter)
+        {
+            if (REDIS_REPLY_ARRAY == (*iter)->type)
+            {
+                std::set<std::string> tmpValues;
+                get_values((*iter).get(), &tmpValues);
+                values->insert(tmpValues.begin(), tmpValues.end());
+            }
+        }
+    }
+}
+
 //
 // KEY/VALUE
 //
@@ -595,6 +629,26 @@ void CRedisClient::set(const std::string& key, const std::string& value, std::pa
     //
     // OK: redis_reply->str
     redis_command(false, force_retry, retry_times, key, cmd_args, which);
+}
+
+// GETSET key value
+// Time complexity: O(1)
+bool CRedisClient::getset(const std::string& key, std::string* oldVal, const std::string& newVal, std::pair<std::string, uint16_t>* which, int retry_times, bool force_retry) throw(CRedisException)
+{
+    CCommandArgs cmd_args;
+    cmd_args.add_arg("GETSET");
+    cmd_args.add_arg(key);
+    cmd_args.add_arg(newVal);
+    cmd_args.final();
+
+    // Bulk string reply:
+    // the old value of key, or nil when key does not exist.
+    RedisReplyHelper redis_reply = redis_command(false, force_retry, retry_times, key, cmd_args, which);
+    if (REDIS_REPLY_NIL == redis_reply->type)
+        return false;
+    if (REDIS_REPLY_STRING == redis_reply->type)
+        return get_value(redis_reply.get(), oldVal);
+    return true;
 }
 
 // Time complexity: O(1)
@@ -1410,6 +1464,27 @@ bool CRedisClient::lpop(const std::string& key, std::string* value, std::pair<st
     if (REDIS_REPLY_STRING == redis_reply->type)
         return get_value(redis_reply.get(), value);
     return true; // MULTI & EXEC the type always is REDIS_REPLY_STATUS
+}
+
+// LSET key index value
+bool CRedisClient::lset(const std::string& key, int64_t index, const std::string& value, std::pair<std::string, uint16_t>* which, int retry_times, bool force_retry) throw (CRedisException)
+{
+    CCommandArgs cmd_args;
+    cmd_args.add_arg("LSET");
+    cmd_args.add_arg(key);
+    cmd_args.add_arg(index);
+    cmd_args.add_arg(value);
+    cmd_args.final();
+
+    const RedisReplyHelper redis_reply = redis_command(false, force_retry, retry_times, key, cmd_args, which);
+    if (REDIS_REPLY_ERROR == redis_reply->type)
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
 }
 
 // Time complexity: O(1)
@@ -2516,6 +2591,37 @@ const RedisReplyHelper CRedisClient::redis_command(bool is_read_command, bool fo
     }
 
     return redis_reply;
+}
+
+const std::vector<RedisReplyHelper> CRedisClient::redis_command_cluster(int retry_times, const CCommandArgs& command_args)
+{
+    std::vector<RedisReplyHelper> ret;
+    std::map<std::pair<std::string, uint16_t>, struct RedisNode*>::iterator iter = _redis_contexts.begin();
+    for (; iter != _redis_contexts.end(); ++iter)
+    {
+        redisContext* redis_context = iter->second->context;
+        if (NULL != redis_context)
+        {
+            for (int i = 0; i < retry_times + 1; ++i)
+            {
+                RedisReplyHelper redis_replay = NULL;
+                redis_replay = (redisReply*)redisCommandArgv(redis_context, command_args.get_argc(), command_args.get_argv(), command_args.get_argvlen());
+                if (redis_replay)
+                {
+                    ret.push_back(redis_replay);
+                    break;
+                }
+                else
+                {
+                    if (redis_context->err != 0)
+                    {
+                        redisReconnect(redis_context);
+                    }
+                }
+            }
+        }
+    }
+    return ret;
 }
 
 void CRedisClient::init()

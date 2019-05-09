@@ -29,7 +29,7 @@ INSTALL?= cp -a
 DEBUG?= -g -ggdb # -DSLEEP_USE_POLL=1
 WARNINGS=-Wall -W -Wwrite-strings
 REAL_CPPFLAGS=$(CPPFLAGS) $(ARCH) -I$(HIREDIS)/include -DSLEEP_USE_POLL=1 -D__STDC_FORMAT_MACROS=1 -fstrict-aliasing -fPIC $(DEBUG) $(OPTIMIZATION) $(WARNINGS)
-REAL_LDFLAGS=$(LDFLAGS) $(ARCH) -fPIC $(HIREDIS)/lib/libhiredis.a
+REAL_LDFLAGS=$(LDFLAGS) $(ARCH) -fPIC $(INSTALL_LIBRARY_PATH)/libhiredis.a
 
 CXX:=$(shell sh -c 'type $(CXX) >/dev/null 2>/dev/null && echo $(CXX) || echo g++')
 STLIBSUFFIX=a
@@ -79,4 +79,4 @@ dep:
 	$(CXX) -MM *.cpp
 
 test: all
-	./r3c_test $(REDIS_CLUSTER_NODES)
+#	./r3c_test $(REDIS_CLUSTER_NODES)

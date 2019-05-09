@@ -74,10 +74,12 @@ static void test_get_and_set3(const std::string& redis_cluster_nodes, const std:
 static void test_incrby(const std::string& redis_cluster_nodes, const std::string& redis_password);
 static void test_setnxex(const std::string& redis_cluster_nodes, const std::string& redis_password);
 static void test_mget_and_mset(const std::string& redis_cluster_nodes, const std::string& redis_password);
+static void test_getset(const std::string& redis_cluster_nodes, const std::string& redis_password);
 
 ////////////////////////////////////////////////////////////////////////////
 // LIST
 static void test_list(const std::string& redis_cluster_nodes, const std::string& redis_password);
+static void test_lset(const std::string& redis_cluster_nodes, const std::string& redis_password);
 
 ////////////////////////////////////////////////////////////////////////////
 // HASH
@@ -106,6 +108,9 @@ static void test_zrangebyscore(const std::string& redis_cluster_nodes, const std
 static void test_zrevrangebyscore(const std::string& redis_cluster_nodes, const std::string& redis_password);
 static void test_zrem(const std::string& redis_cluster_nodes, const std::string& redis_password);
 static void test_zremrangebyrank(const std::string& redis_cluster_nodes, const std::string& redis_password);
+
+// keys
+static void test_keys(const std::string& redis_cluster_nodes, const std::string& redis_password);
 
 static void my_log_write(const char* format, ...)
 {
@@ -143,6 +148,11 @@ int main(int argc, char* argv[])
 
     r3c::set_info_log_write(my_log_write);
     r3c::set_debug_log_write(my_log_write);
+
+    //test_getset(redis_cluster_nodes, redis_password);
+    //test_lset(redis_cluster_nodes, redis_password);
+    test_keys(redis_cluster_nodes, redis_password);
+    return 0;
 
     ////////////////////////////////////////////////////////////////////////////
     // EVAL
@@ -1216,6 +1226,46 @@ void test_mget_and_mset(const std::string& redis_cluster_nodes, const std::strin
     }
 }
 
+void test_getset(const std::string& redis_cluster_nodes, const std::string& redis_password)
+{
+    try
+    {
+        r3c::CRedisClient rc(redis_cluster_nodes, redis_password);
+        const std::string key = "tgetset";
+        std::string val = "testgetset";
+        rc.set(key, val);
+        std::string oldVal;
+        std::string newVal = "newgetset";
+
+        if (rc.getset(key, &oldVal, newVal))
+        {
+            printf("getset: old: %s\n", oldVal.c_str());
+            std::string tmp;
+            rc.get(key, &tmp);
+            printf("getset: new: %s\n", tmp.c_str());
+            rc.del(key);
+        }
+        else
+        {
+            printf("getset: false\n");
+        }
+
+        oldVal.clear();
+        if (!rc.getset(key, &oldVal, newVal))
+        {
+            printf("getset: key is not exists\n");
+            std::string tmp;
+            rc.get(key, &tmp);
+            printf("getset: new: %s\n", tmp.c_str());
+            rc.del(key);
+        }
+    }
+    catch (r3c::CRedisException& ex)
+    {
+        ERROR_PRINT("ERROR: %s\n", ex.str().c_str());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////
 // LIST
 void test_list(const std::string& redis_cluster_nodes, const std::string& redis_password)
@@ -1335,6 +1385,38 @@ void test_list(const std::string& redis_cluster_nodes, const std::string& redis_
         SUCCESS_PRINT("%s", "OK");
     }
     catch (r3c::CRedisException& ex)
+    {
+        ERROR_PRINT("ERROR: %s", ex.str().c_str());
+    }
+}
+
+void test_lset(const std::string& redis_cluster_nodes, const std::string& redis_password)
+{
+    try
+    {
+        r3c::CRedisClient rc(redis_cluster_nodes, redis_password);
+        const std::string key = "testlset";
+        std::vector<std::string> vals;
+        vals.push_back("L1");
+        vals.push_back("L2");
+        vals.push_back("L3");
+        rc.rpush(key, vals);
+
+        std::string val = "lsettest";
+        if (rc.lset(key, 0, val))
+        {
+            std::vector<std::string> tmp;
+            rc.lrange(key, 0, 2, &tmp);
+            printf("lset: new: %s, %s, %s \n", tmp[0].c_str(), tmp[1].c_str(), tmp[2].c_str());
+            rc.del(key);
+        }
+
+        if (!rc.lset(key, 0, val))
+        {
+            printf("lset: error\n");
+        }
+    }
+    catch (const r3c::CRedisException& ex)
     {
         ERROR_PRINT("ERROR: %s", ex.str().c_str());
     }
@@ -2908,6 +2990,31 @@ void test_zremrangebyrank(const std::string& redis_cluster_nodes, const std::str
 
         rc.del(key);
         SUCCESS_PRINT("%s", "OK");
+    }
+    catch (r3c::CRedisException& ex)
+    {
+        ERROR_PRINT("ERROR: %s", ex.str().c_str());
+    }
+}
+
+void test_keys(const std::string& redis_cluster_nodes, const std::string& redis_password)
+{
+    try
+    {
+        r3c::CRedisClient rc(redis_cluster_nodes, redis_password);
+        while (true)
+        {
+            std::string pattern = "test*";
+            std::set<std::string> keys;
+            rc.keys(pattern, &keys);
+            printf("keys %s \n", pattern.c_str());
+            for (std::set<std::string>::const_iterator iter = keys.begin(); iter != keys.end(); ++iter)
+            {
+                printf("key %s \n", (*iter).c_str());
+            }
+            printf("keys end \n");
+            sleep(3);
+        }
     }
     catch (r3c::CRedisException& ex)
     {
